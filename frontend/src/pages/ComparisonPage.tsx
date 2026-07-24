@@ -185,6 +185,8 @@ export function ComparisonPage() {
             sourceA={sources.A.script}
             sourceB={sources.B.script}
             visible={comparisonVisible}
+            onSourceAChange={(script) => updateSource("A", { script })}
+            onSourceBChange={(script) => updateSource("B", { script })}
             onCompare={() => setComparisonVisible(true)}
             onSwap={swapSources}
             onClear={() => setComparisonVisible(false)}

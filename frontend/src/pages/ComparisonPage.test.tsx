@@ -45,6 +45,10 @@ describe("ComparisonPage", () => {
       expect(screen.getByRole("button", { name: "Compare" })).toBeEnabled(),
     );
     expect(await screen.findByTestId("monaco-diff")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "B → A" }));
+    expect(screen.getByText("Source B · Reference")).toBeInTheDocument();
+    expect(screen.getByText("Source A · Editable target")).toBeInTheDocument();
   });
 
   it("renders a friendly API error", async () => {

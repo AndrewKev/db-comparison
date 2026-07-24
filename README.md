@@ -12,6 +12,9 @@ memori halaman dan request API selama sesi.
 - Test connection dan load view script untuk setiap source
 - Monaco SQL Editor read-only dengan line number, copy, dan normalisasi whitespace
 - Monaco Diff Editor untuk menunjukkan baris sama, berubah, ditambah, dan dihapus
+- Transfer per blok perubahan seperti VS Code melalui panah pada gutter tengah
+- Arah penerapan `A → B` atau `B → A` dengan target editor yang dapat diedit
+- Navigasi Previous/Next Change
 - Comparison otomatis setelah kedua script berhasil dimuat
 - Swap Sources dan Clear Comparison
 - Validasi allowlist identifier Oracle 11g
@@ -313,6 +316,20 @@ pada reverse proxy/APM.
   keyword atau struktur SQL tidak ditulis ulang.
 - `DBMS_METADATA` dapat menghasilkan atribut berbeda pada versi atau konfigurasi
   Oracle yang berbeda.
+
+### Menerapkan perubahan dari satu source ke source lain
+
+1. Muat script Source A dan Source B.
+2. Pilih **A → B** bila Source B menjadi target, atau **B → A** bila Source A menjadi
+   target.
+3. Arah kiri adalah reference dan arah kanan adalah editable target.
+4. Arahkan pointer ke blok perubahan, lalu klik ikon panah pada gutter tengah untuk
+   menerapkan blok tersebut ke target.
+5. Gunakan **Previous** dan **Next** untuk berpindah antarblok perubahan.
+
+Perubahan pada target langsung disimpan ke state aplikasi dan terlihat juga pada
+editor source. Perubahan ini hanya berada dalam memori browser; aplikasi tidak
+menulis ulang view ke Oracle Database.
 
 ### CORS error
 

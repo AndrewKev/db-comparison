@@ -64,6 +64,79 @@
   opacity: 0.45;
 }
 
+.transferBar {
+  display: grid;
+  grid-template-columns: auto minmax(220px, 1fr) auto;
+  align-items: center;
+  gap: 18px;
+  padding: 12px 18px;
+  border-top: 1px solid var(--line);
+  background: #f8fafc;
+}
+
+.directionGroup,
+.navigation {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.directionGroup > span {
+  margin-right: 3px;
+  color: #66758a;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.directionGroup button,
+.navigation button {
+  height: 31px;
+  border: 1px solid #c9d2de;
+  border-radius: 7px;
+  padding: 0 10px;
+  color: #425268;
+  background: #fff;
+  font-size: 0.69rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.directionGroup .activeDirection {
+  border-color: #158f83;
+  color: #fff;
+  background: #158f83;
+}
+
+.directionGroup button:disabled,
+.navigation button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.transferBar > p {
+  margin: 0;
+  color: #718095;
+  font-size: 0.72rem;
+  line-height: 1.45;
+}
+
+.transferBar > p strong {
+  color: #26374c;
+}
+
+.navigation {
+  justify-content: flex-end;
+}
+
+.navigation span {
+  min-width: 54px;
+  color: #657389;
+  text-align: center;
+  font: 700 0.67rem/1 ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+
 .labels {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -144,6 +217,14 @@
   }
 
   .actions {
+    justify-content: flex-start;
+  }
+
+  .transferBar {
+    grid-template-columns: 1fr;
+  }
+
+  .navigation {
     justify-content: flex-start;
   }
 }
