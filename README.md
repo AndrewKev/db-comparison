@@ -237,6 +237,48 @@ dotnet test
 
 Tanpa variable tersebut, test koneksi Oracle nyata tidak dijalankan.
 
+## Publish backend menjadi `.exe`
+
+Backend dapat dipublish sebagai executable Windows 64-bit yang self-contained. Dengan
+mode ini, komputer tujuan tidak perlu memasang .NET Runtime.
+
+Jalankan dari root repository:
+
+```bash
+dotnet publish backend/OracleComparison.Api/OracleComparison.Api.csproj \
+  --configuration Release \
+  --runtime win-x64 \
+  --self-contained true \
+  -p:PublishSingleFile=true \
+  -p:IncludeNativeLibrariesForSelfExtract=true \
+  --output publish/win-x64
+```
+
+Hasil publish berada di folder `publish/win-x64`, dengan executable utama
+`OracleComparison.Api.exe`. Salin seluruh isi folder tersebut ke komputer tujuan
+karena file konfigurasi yang dihasilkan tetap dibutuhkan.
+
+Jalankan backend dari PowerShell:
+
+```powershell
+cd publish/win-x64
+$env:ASPNETCORE_URLS = "http://localhost:5000"
+$env:OracleComparison__AllowedCorsOrigin = "http://localhost:5173"
+.\OracleComparison.Api.exe
+```
+
+Uji proses yang sudah berjalan melalui `http://localhost:5000/health`.
+
+> `.exe` ini hanya menjalankan backend API. Frontend React tetap harus dibangun
+> dengan `npm run build` dari folder `frontend`, lalu isi folder `frontend/dist`
+> di-host menggunakan web server. Pastikan `VITE_API_BASE_URL` sudah menunjuk ke URL
+> backend sebelum menjalankan build frontend.
+
+Untuk target Windows ARM64, ganti `win-x64` dengan `win-arm64` pada nilai
+`--runtime` dan folder output. Jika .NET 8 Runtime sudah terpasang di komputer tujuan,
+ukuran publish dapat diperkecil dengan mengganti `--self-contained true` menjadi
+`--self-contained false`.
+
 ## Docker
 
 ```bash
