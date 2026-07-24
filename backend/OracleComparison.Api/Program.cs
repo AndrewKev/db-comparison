@@ -1,11 +1,33 @@
 using Microsoft.AspNetCore.Http.Features;
+using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Options;
 using OracleComparison.Api.Exceptions;
 using OracleComparison.Api.Models;
 using OracleComparison.Api.Services;
 using OracleComparison.Api.Validators;
+using System.Reflection;
 
 var builder = WebApplication.CreateBuilder(args);
+
+var publishMetadata = typeof(Program).Assembly
+    .GetCustomAttributes<AssemblyMetadataAttribute>()
+    .Where(attribute => !string.IsNullOrWhiteSpace(attribute.Value))
+    .ToDictionary(attribute => attribute.Key, attribute => attribute.Value!);
+
+if (publishMetadata.TryGetValue("PublishedUrls", out var publishedUrls))
+    builder.WebHost.UseUrls(publishedUrls);
+
+if (publishMetadata.TryGetValue("PublishedAllowedCorsOrigin", out var publishedAllowedCorsOrigin))
+{
+    builder.Configuration[
+        $"{OracleComparisonOptions.SectionName}:{nameof(OracleComparisonOptions.AllowedCorsOrigin)}"] =
+        publishedAllowedCorsOrigin;
+}
+
+var frontendIsEmbedded =
+    publishMetadata.TryGetValue("FrontendEmbedded", out var embeddedValue) &&
+    bool.TryParse(embeddedValue, out var isEmbedded) &&
+    isEmbedded;
 
 builder.Services.AddControllers()
     .ConfigureApiBehaviorOptions(api =>
@@ -65,9 +87,35 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
+StaticFileOptions? embeddedStaticFileOptions = null;
+if (frontendIsEmbedded)
+{
+    var embeddedFrontend = new ManifestEmbeddedFileProvider(
+        typeof(Program).Assembly,
+        "wwwroot");
+    embeddedStaticFileOptions = new StaticFileOptions
+    {
+        FileProvider = embeddedFrontend
+    };
+    app.UseDefaultFiles(new DefaultFilesOptions
+    {
+        FileProvider = embeddedFrontend
+    });
+    app.UseStaticFiles(embeddedStaticFileOptions);
+}
+else
+{
+    app.UseDefaultFiles();
+    app.UseStaticFiles();
+}
+
 app.UseCors("Frontend");
 app.MapControllers();
 app.MapGet("/health", () => Results.Ok(new { status = "healthy" }));
+if (embeddedStaticFileOptions is not null)
+    app.MapFallbackToFile("index.html", embeddedStaticFileOptions);
+else
+    app.MapFallbackToFile("index.html");
 
 app.Run();
 

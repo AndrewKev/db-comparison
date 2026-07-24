@@ -237,12 +237,14 @@ dotnet test
 
 Tanpa variable tersebut, test koneksi Oracle nyata tidak dijalankan.
 
-## Publish backend menjadi `.exe`
+## Publish aplikasi menjadi `.exe`
 
-Backend dapat dipublish sebagai executable Windows 64-bit yang self-contained. Dengan
-mode ini, komputer tujuan tidak perlu memasang .NET Runtime.
+Backend menyajikan hasil build React sebagai static files. Saat `dotnet publish`
+dijalankan, proses publish otomatis menjalankan `npm ci` dan `npm run build`,
+menanam isi `frontend/dist` sebagai resource `wwwroot`, lalu membundel backend,
+frontend, native library, dan konfigurasi production ke satu executable Windows.
 
-Jalankan dari root repository:
+Jalankan perintah berikut dari root repository:
 
 ```bash
 dotnet publish backend/OracleComparison.Api/OracleComparison.Api.csproj \
@@ -251,33 +253,65 @@ dotnet publish backend/OracleComparison.Api/OracleComparison.Api.csproj \
   --self-contained true \
   -p:PublishSingleFile=true \
   -p:IncludeNativeLibrariesForSelfExtract=true \
+  -p:IncludeAllContentForSelfExtract=true \
+  -p:DebugType=None \
+  -p:PublishedUrls=http://localhost:5000 \
+  -p:PublishedAllowedCorsOrigin=http://localhost:5000 \
   --output publish/win-x64
 ```
 
-Hasil publish berada di folder `publish/win-x64`, dengan executable utama
-`OracleComparison.Api.exe`. Salin seluruh isi folder tersebut ke komputer tujuan
-karena file konfigurasi yang dihasilkan tetap dibutuhkan.
+Parameter `PublishedUrls` dan `PublishedAllowedCorsOrigin` ditanam sebagai metadata
+assembly selama publish. Static files frontend juga ditanam sebagai embedded
+resources. Nilai dan file tersebut benar-benar dapat dibaca langsung dari `.exe`,
+bukan sekadar environment variable sementara atau file terpisah di folder publish.
 
-Jalankan backend dari PowerShell:
+Hasil utama berada di `publish/win-x64/OracleComparison.Api.exe`. Jalankan:
 
 ```powershell
-cd publish/win-x64
-$env:ASPNETCORE_URLS = "http://localhost:5000"
-$env:OracleComparison__AllowedCorsOrigin = "http://localhost:5173"
-.\OracleComparison.Api.exe
+.\publish\win-x64\OracleComparison.Api.exe
 ```
 
-Uji proses yang sudah berjalan melalui `http://localhost:5000/health`.
+Kemudian buka `http://localhost:5000`. Frontend dan API menggunakan origin yang sama,
+sehingga `VITE_API_BASE_URL` secara default dikosongkan dan request API menggunakan
+relative URL seperti `/api/oracle/test-connection`. Tidak diperlukan web server
+frontend atau konfigurasi environment tambahan pada komputer tujuan.
 
-> `.exe` ini hanya menjalankan backend API. Frontend React tetap harus dibangun
-> dengan `npm run build` dari folder `frontend`, lalu isi folder `frontend/dist`
-> di-host menggunakan web server. Pastikan `VITE_API_BASE_URL` sudah menunjuk ke URL
-> backend sebelum menjalankan build frontend.
+Jika frontend harus memanggil API pada URL berbeda, tambahkan parameter berikut saat
+publish:
+
+```bash
+-p:FrontendApiBaseUrl=https://api.example.com
+```
+
+Nilai `FrontendApiBaseUrl` diberikan sebagai `VITE_API_BASE_URL` ketika Vite
+membangun frontend, sehingga nilainya tertanam di JavaScript production. Pada
+skenario ini, set juga `PublishedAllowedCorsOrigin` ke origin tempat frontend
+diakses.
+
+Untuk menerima koneksi dari komputer lain di jaringan, gunakan contoh berikut:
+
+```bash
+dotnet publish backend/OracleComparison.Api/OracleComparison.Api.csproj \
+  --configuration Release \
+  --runtime win-x64 \
+  --self-contained true \
+  -p:PublishSingleFile=true \
+  -p:IncludeNativeLibrariesForSelfExtract=true \
+  -p:IncludeAllContentForSelfExtract=true \
+  -p:DebugType=None \
+  -p:PublishedUrls=http://0.0.0.0:5000 \
+  -p:PublishedAllowedCorsOrigin=http://localhost:5000 \
+  --output publish/win-x64
+```
+
+Setelah executable dijalankan, akses melalui
+`http://<IP-komputer-yang-menjalankan-exe>:5000`. Pastikan Windows Firewall
+mengizinkan inbound TCP port `5000`.
 
 Untuk target Windows ARM64, ganti `win-x64` dengan `win-arm64` pada nilai
-`--runtime` dan folder output. Jika .NET 8 Runtime sudah terpasang di komputer tujuan,
-ukuran publish dapat diperkecil dengan mengganti `--self-contained true` menjadi
-`--self-contained false`.
+`--runtime` dan folder output. Jangan menanam connection string atau credential
+Oracle ke parameter publish; connection string tetap dimasukkan melalui UI dan hanya
+disimpan dalam memori selama sesi.
 
 ## Docker
 

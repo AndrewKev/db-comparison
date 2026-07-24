@@ -4,9 +4,44 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <InvariantGlobalization>false</InvariantGlobalization>
+    <FrontendRoot>$(MSBuildProjectDirectory)/../../frontend/</FrontendRoot>
+    <PublishedUrls Condition="'$(PublishedUrls)' == ''">http://localhost:5000</PublishedUrls>
+    <PublishedAllowedCorsOrigin Condition="'$(PublishedAllowedCorsOrigin)' == ''">http://localhost:5000</PublishedAllowedCorsOrigin>
+    <FrontendApiBaseUrl Condition="'$(FrontendApiBaseUrl)' == ''"></FrontendApiBaseUrl>
+    <IsTransformWebConfigDisabled>true</IsTransformWebConfigDisabled>
+    <GenerateEmbeddedFilesManifest Condition="'$(PublishSingleFile)' == 'true'">true</GenerateEmbeddedFilesManifest>
   </PropertyGroup>
   <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.FileProviders.Embedded" Version="8.0.0" />
     <PackageReference Include="Oracle.ManagedDataAccess.Core" Version="3.21.110" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2" />
+    <Content Update="appsettings*.json">
+      <ExcludeFromSingleFile>false</ExcludeFromSingleFile>
+    </Content>
+    <AssemblyMetadata Include="PublishedUrls" Value="$(PublishedUrls)" />
+    <AssemblyMetadata Include="PublishedAllowedCorsOrigin" Value="$(PublishedAllowedCorsOrigin)" />
+    <AssemblyMetadata Include="FrontendEmbedded" Value="$(PublishSingleFile)" />
   </ItemGroup>
+
+  <Target Name="BuildFrontendForPublish"
+          BeforeTargets="PrepareForBuild"
+          Condition="'$(PublishSingleFile)' == 'true'">
+    <Exec WorkingDirectory="$(FrontendRoot)"
+          Command="npm ci"
+          Condition="'$(SkipFrontendBuild)' != 'true'" />
+    <Exec WorkingDirectory="$(FrontendRoot)"
+          Command="npm run build"
+          EnvironmentVariables="VITE_API_BASE_URL=$(FrontendApiBaseUrl)"
+          Condition="'$(SkipFrontendBuild)' != 'true'" />
+    <Error Condition="!Exists('$(FrontendRoot)dist/index.html')"
+           Text="Frontend build was not found. Run npm run build in frontend or publish without SkipFrontendBuild=true." />
+
+    <ItemGroup>
+      <FrontendDistFiles Include="$(FrontendRoot)dist/**/*" />
+      <EmbeddedResource Include="@(FrontendDistFiles)">
+        <Link>wwwroot/%(RecursiveDir)%(Filename)%(Extension)</Link>
+        <LogicalName>wwwroot/%(RecursiveDir)%(Filename)%(Extension)</LogicalName>
+      </EmbeddedResource>
+    </ItemGroup>
+  </Target>
 </Project>
