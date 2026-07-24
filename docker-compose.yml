@@ -1,0 +1,25 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: OracleComparison.Api/Dockerfile
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      OracleComparison__AllowedCorsOrigin: http://localhost:5173
+      OracleComparison__QueryTimeoutSeconds: 60
+      OracleComparison__MaximumViewScriptLength: 1000000
+      OracleComparison__MaximumResponseSizeBytes: 10485760
+    ports:
+      - "5000:8080"
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_BASE_URL: http://localhost:5000
+    depends_on:
+      - backend
+    ports:
+      - "5173:80"
+    restart: unless-stopped

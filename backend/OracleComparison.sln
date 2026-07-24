@@ -1,0 +1,24 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OracleComparison.Api", "OracleComparison.Api\OracleComparison.Api.csproj", "{87C954D3-C39A-4A1C-8259-D35EF66DDF7B}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OracleComparison.Tests", "OracleComparison.Tests\OracleComparison.Tests.csproj", "{74C732DC-B157-4E02-893B-EE17B0EB093A}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{87C954D3-C39A-4A1C-8259-D35EF66DDF7B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{87C954D3-C39A-4A1C-8259-D35EF66DDF7B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{87C954D3-C39A-4A1C-8259-D35EF66DDF7B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{87C954D3-C39A-4A1C-8259-D35EF66DDF7B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{74C732DC-B157-4E02-893B-EE17B0EB093A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{74C732DC-B157-4E02-893B-EE17B0EB093A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{74C732DC-B157-4E02-893B-EE17B0EB093A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{74C732DC-B157-4E02-893B-EE17B0EB093A}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal

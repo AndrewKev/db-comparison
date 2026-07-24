@@ -1,0 +1,149 @@
+.section {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface);
+  box-shadow: 0 12px 32px rgba(23, 34, 52, 0.07);
+}
+
+.header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 25px 28px 22px;
+}
+
+.step {
+  color: #158f83;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+
+.header h2 {
+  margin: 6px 0 4px;
+  color: var(--ink);
+  font-size: 1.4rem;
+}
+
+.header p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.actions button {
+  height: 38px;
+  border: 1px solid #c5ceda;
+  border-radius: 8px;
+  padding: 0 13px;
+  color: #405064;
+  background: #fff;
+  font-size: 0.75rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.actions .compare {
+  border-color: #158f83;
+  color: #fff;
+  background: #158f83;
+}
+
+.actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.labels {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid #303b4c;
+  color: #b7c3d4;
+  background: #172235;
+  font-size: 0.69rem;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.labels span {
+  padding: 12px 20px;
+}
+
+.labels span + span {
+  border-left: 1px solid #303b4c;
+}
+
+.diff {
+  overflow: hidden;
+  background: #111b2c;
+}
+
+.empty {
+  display: grid;
+  min-height: 410px;
+  place-content: center;
+  justify-items: center;
+  padding: 30px;
+  text-align: center;
+  background:
+    radial-gradient(circle at 50% 0, rgba(21, 143, 131, 0.08), transparent 42%),
+    #f8fafc;
+}
+
+.emptyIcon {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #64748a;
+  font: 700 0.88rem/1 ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+
+.emptyIcon span {
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 12px;
+  background: #fff;
+}
+
+.emptyIcon i {
+  width: 25px;
+  height: 1px;
+  background: #a4b0c0;
+}
+
+.empty h3 {
+  margin: 18px 0 6px;
+  color: var(--ink);
+  font-size: 1rem;
+}
+
+.empty p {
+  max-width: 430px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.55;
+}
+
+@media (max-width: 780px) {
+  .header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .actions {
+    justify-content: flex-start;
+  }
+}
