@@ -1,9 +1,18 @@
-import { useEffect, useRef, useState } from "react";
 import {
-  DiffEditor,
-  type DiffOnMount,
+  forwardRef,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+} from "react";
+import {
+  loader,
   type MonacoDiffEditor,
 } from "@monaco-editor/react";
+import type {
+  IDisposable,
+  editor as MonacoEditor,
+} from "monaco-editor";
 import styles from "./ComparisonPanel.module.css";
 
 type ApplyDirection = "AtoB" | "BtoA";
@@ -19,21 +28,36 @@ interface ComparisonPanelProps {
   onClear: () => void;
 }
 
-export function ComparisonPanel({
-  sourceA,
-  sourceB,
-  visible,
-  onSourceAChange,
-  onSourceBChange,
-  onCompare,
-  onSwap,
-  onClear,
-}: ComparisonPanelProps) {
+export interface ComparisonPanelHandle {
+  getModifiedValue: () => string;
+}
+
+export const ComparisonPanel = forwardRef<
+  ComparisonPanelHandle,
+  ComparisonPanelProps
+>(function ComparisonPanel(
+  {
+    sourceA,
+    sourceB,
+    visible,
+    onSourceAChange,
+    onSourceBChange,
+    onCompare,
+    onSwap,
+    onClear,
+  },
+  ref,
+) {
   const ready = Boolean(sourceA && sourceB);
   const [direction, setDirection] = useState<ApplyDirection>("AtoB");
   const [changeCount, setChangeCount] = useState(0);
   const [changeIndex, setChangeIndex] = useState(-1);
   const editorRef = useRef<MonacoDiffEditor | null>(null);
+  const editorContainerRef = useRef<HTMLDivElement | null>(null);
+  const originalModelRef = useRef<MonacoEditor.ITextModel | null>(null);
+  const modifiedModelRef = useRef<MonacoEditor.ITextModel | null>(null);
+  const latestTargetScriptRef = useRef("");
+  const onModifiedChangeRef = useRef<(script: string) => void>(() => undefined);
 
   const isAtoB = direction === "AtoB";
   const referenceScript = isAtoB ? sourceA : sourceB;
@@ -41,38 +65,193 @@ export function ComparisonPanel({
   const referenceLabel = isAtoB ? "Source A" : "Source B";
   const targetLabel = isAtoB ? "Source B" : "Source A";
 
+  latestTargetScriptRef.current = targetScript;
+  onModifiedChangeRef.current = isAtoB ? onSourceBChange : onSourceAChange;
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      // Always read from the model so callers receive edits and hunk reverts immediately.
+      getModifiedValue: () =>
+        modifiedModelRef.current?.getValue() ?? latestTargetScriptRef.current,
+    }),
+    [],
+  );
+
   useEffect(() => {
     setChangeCount(0);
     setChangeIndex(-1);
-    editorRef.current = null;
-  }, [direction]);
+  }, [direction, referenceScript, visible]);
 
-  const mountEditor: DiffOnMount = (editor) => {
-    editorRef.current = editor;
+  useEffect(() => {
+    if (!visible || !ready || !editorContainerRef.current) return;
 
-    const updateDiffState = () => {
-      const count = editor.getLineChanges()?.length ?? 0;
-      setChangeCount(count);
-      setChangeIndex((current) => (current >= count ? count - 1 : current));
-    };
+    let cancelled = false;
+    let editor: MonacoDiffEditor | null = null;
+    let originalModel: MonacoEditor.ITextModel | null = null;
+    let modifiedModel: MonacoEditor.ITextModel | null = null;
+    let contentSubscription: IDisposable | null = null;
+    let diffSubscription: IDisposable | null = null;
+    let revertSubscription: IDisposable | null = null;
+    let revertDecorationIds: string[] = [];
+    let currentLineChanges: MonacoEditor.ILineChange[] = [];
 
-    const contentSubscription = editor
-      .getModifiedEditor()
-      .onDidChangeModelContent(() => {
-        const script = editor.getModifiedEditor().getValue();
-        if (isAtoB) onSourceBChange(script);
-        else onSourceAChange(script);
+    void loader
+      .init()
+      .then((monaco) => {
+        if (cancelled || !editorContainerRef.current) return;
+
+        originalModel = monaco.editor.createModel(referenceScript, "sql");
+        modifiedModel = monaco.editor.createModel(
+          latestTargetScriptRef.current,
+          "sql",
+        );
+        // Keep one model character equal to one visible cursor step.
+        // This changes tab rendering only; neither model's text is modified.
+        originalModel.updateOptions({ tabSize: 1 });
+        modifiedModel.updateOptions({ tabSize: 1 });
+
+        editor = monaco.editor.createDiffEditor(editorContainerRef.current, {
+          readOnly: false,
+          originalEditable: false,
+          renderSideBySide: true,
+          // A custom margin handler below locks every action to one ILineChange.
+          renderMarginRevertIcon: false,
+          renderGutterMenu: false,
+          // editor.api disables this standalone default; block icons live in this margin.
+          glyphMargin: true,
+          diffAlgorithm: "advanced",
+          enableSplitViewResizing: true,
+          minimap: { enabled: false },
+          lineNumbers: "on",
+          scrollBeyondLastLine: false,
+          automaticLayout: true,
+          wordWrap: "on",
+          renderOverviewRuler: true,
+          padding: { top: 12, bottom: 12 },
+        });
+        editor.setModel({ original: originalModel, modified: modifiedModel });
+        editor.getOriginalEditor().updateOptions({ readOnly: true });
+        monaco.editor.setTheme("vs-dark");
+
+        editorRef.current = editor;
+        originalModelRef.current = originalModel;
+        modifiedModelRef.current = modifiedModel;
+
+        const updateDiffState = () => {
+          currentLineChanges = editor?.getLineChanges() ?? [];
+          const count = currentLineChanges.length;
+
+          revertDecorationIds = editor
+            ? editor.getModifiedEditor().deltaDecorations(
+                revertDecorationIds,
+                currentLineChanges.map((change, index) => {
+                  const lineNumber = getRevertIconLine(change, modifiedModel!);
+                  return {
+                    range: {
+                      startLineNumber: lineNumber,
+                      startColumn: 1,
+                      endLineNumber: lineNumber,
+                      endColumn: 1,
+                    },
+                    options: {
+                      glyphMarginClassName:
+                        `comparison-block-revert comparison-block-revert-${index}`,
+                      glyphMarginHoverMessage: {
+                        value: "Revert only this changed block",
+                      },
+                    },
+                  };
+                }),
+              )
+            : [];
+
+          setChangeCount(count);
+          setChangeIndex((current) => (current >= count ? count - 1 : current));
+        };
+
+        contentSubscription = editor
+          .getModifiedEditor()
+          .onDidChangeModelContent(() => {
+            // This also runs after a block revert and keeps parent state current.
+            onModifiedChangeRef.current(modifiedModel?.getValue() ?? "");
+          });
+        diffSubscription = editor.onDidUpdateDiff(updateDiffState);
+        revertSubscription = editor
+          .getModifiedEditor()
+          .onMouseDown((event) => {
+            const revertIcon = event.target.element?.closest(
+              ".comparison-block-revert",
+            );
+            if (!revertIcon || !originalModel || !modifiedModel) {
+              return;
+            }
+
+            const indexClass = [...revertIcon.classList].find((className) =>
+              className.startsWith("comparison-block-revert-"),
+            );
+            const selectedChange = indexClass
+              ? currentLineChanges[
+                  Number(indexClass.replace("comparison-block-revert-", ""))
+                ]
+              : undefined;
+            if (!selectedChange) return;
+
+            event.event.preventDefault();
+            event.event.stopPropagation();
+
+            const modifiedEditor = editor?.getModifiedEditor();
+            if (!modifiedEditor) return;
+
+            // Only ranges belonging to the clicked ILineChange are edited.
+            const edits = createBlockRevertEdits(
+              selectedChange,
+              originalModel,
+              modifiedModel,
+            );
+            modifiedEditor.pushUndoStop();
+            modifiedEditor.executeEdits("revert-diff-block", edits);
+            modifiedEditor.pushUndoStop();
+          });
+        updateDiffState();
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) {
+          console.error("Monaco initialization failed:", error);
+        }
       });
-    const diffSubscription = editor.onDidUpdateDiff(updateDiffState);
-    const disposeSubscription = editor.onDidDispose(() => {
-      contentSubscription.dispose();
-      diffSubscription.dispose();
-      disposeSubscription.dispose();
-      if (editorRef.current === editor) editorRef.current = null;
-    });
 
-    updateDiffState();
-  };
+    return () => {
+      cancelled = true;
+      contentSubscription?.dispose();
+      diffSubscription?.dispose();
+      revertSubscription?.dispose();
+      if (editor && revertDecorationIds.length > 0) {
+        editor
+          .getModifiedEditor()
+          .deltaDecorations(revertDecorationIds, []);
+      }
+
+      if (editorRef.current === editor) editorRef.current = null;
+      if (originalModelRef.current === originalModel) {
+        originalModelRef.current = null;
+      }
+      if (modifiedModelRef.current === modifiedModel) {
+        modifiedModelRef.current = null;
+      }
+
+      editor?.dispose();
+      originalModel?.dispose();
+      modifiedModel?.dispose();
+    };
+  }, [direction, ready, referenceScript, visible]);
+
+  useEffect(() => {
+    const modifiedModel = modifiedModelRef.current;
+    if (modifiedModel && modifiedModel.getValue() !== targetScript) {
+      modifiedModel.setValue(targetScript);
+    }
+  }, [targetScript]);
 
   const navigateChange = (delta: -1 | 1) => {
     const editor = editorRef.current;
@@ -167,28 +346,11 @@ export function ComparisonPanel({
 
       {visible && ready ? (
         <div className={styles.diff}>
-          <DiffEditor
-            key={direction}
-            height="590px"
-            language="sql"
-            theme="vs-dark"
-            original={referenceScript}
-            modified={targetScript}
-            onMount={mountEditor}
-            options={{
-              readOnly: false,
-              originalEditable: false,
-              renderSideBySide: true,
-              renderMarginRevertIcon: true,
-              enableSplitViewResizing: true,
-              minimap: { enabled: false },
-              lineNumbers: "on",
-              scrollBeyondLastLine: false,
-              automaticLayout: true,
-              wordWrap: "on",
-              renderOverviewRuler: true,
-              padding: { top: 12, bottom: 12 },
-            }}
+          <div
+            ref={editorContainerRef}
+            className={styles.diffEditor}
+            data-testid="monaco-diff"
+            aria-label={`${referenceLabel} and ${targetLabel} SQL comparison`}
           />
         </div>
       ) : (
@@ -208,4 +370,134 @@ export function ComparisonPanel({
       )}
     </section>
   );
+});
+
+function getRevertIconLine(
+  change: MonacoEditor.ILineChange,
+  modifiedModel: MonacoEditor.ITextModel,
+) {
+  return Math.min(
+    modifiedModel.getLineCount(),
+    Math.max(1, change.modifiedStartLineNumber),
+  );
+}
+
+function createBlockRevertEdits(
+  change: MonacoEditor.ILineChange,
+  originalModel: MonacoEditor.ITextModel,
+  modifiedModel: MonacoEditor.ITextModel,
+): MonacoEditor.IIdentifiedSingleEditOperation[] {
+  if (change.charChanges?.length) {
+    return change.charChanges.map((charChange) => {
+      const originalRange = {
+        startLineNumber: charChange.originalStartLineNumber,
+        startColumn: charChange.originalStartColumn,
+        endLineNumber: charChange.originalEndLineNumber,
+        endColumn: charChange.originalEndColumn,
+      };
+
+      return {
+        range: {
+          startLineNumber: charChange.modifiedStartLineNumber,
+          startColumn: charChange.modifiedStartColumn,
+          endLineNumber: charChange.modifiedEndLineNumber,
+          endColumn: charChange.modifiedEndColumn,
+        },
+        text: originalModel.getValueInRange(originalRange),
+        forceMoveMarkers: true,
+      };
+    });
+  }
+
+  const originalIsEmpty = change.originalEndLineNumber === 0;
+  const modifiedIsEmpty = change.modifiedEndLineNumber === 0;
+  const originalText = originalIsEmpty
+    ? ""
+    : getLineBlock(
+        originalModel,
+        change.originalStartLineNumber,
+        change.originalEndLineNumber,
+      );
+
+  if (modifiedIsEmpty) {
+    const lineBeforeInsertion = change.modifiedStartLineNumber;
+    if (lineBeforeInsertion <= 0) {
+      const modifiedIsBlank =
+        modifiedModel.getLineCount() === 1 && modifiedModel.getValue() === "";
+      return [{
+        range: emptyRange(1, 1),
+        text: originalText + (modifiedIsBlank ? "" : modifiedModel.getEOL()),
+        forceMoveMarkers: true,
+      }];
+    }
+
+    if (lineBeforeInsertion >= modifiedModel.getLineCount()) {
+      const lastLine = modifiedModel.getLineCount();
+      return [{
+        range: emptyRange(
+          lastLine,
+          modifiedModel.getLineMaxColumn(lastLine),
+        ),
+        text: modifiedModel.getEOL() + originalText,
+        forceMoveMarkers: true,
+      }];
+    }
+
+    return [{
+      range: emptyRange(lineBeforeInsertion + 1, 1),
+      text: originalText + modifiedModel.getEOL(),
+      forceMoveMarkers: true,
+    }];
+  }
+
+  const startsAt = change.modifiedStartLineNumber;
+  const endsAt = change.modifiedEndLineNumber;
+  const isAtEnd = endsAt === modifiedModel.getLineCount();
+
+  if (originalIsEmpty && isAtEnd && startsAt > 1) {
+    return [{
+      range: {
+        startLineNumber: startsAt - 1,
+        startColumn: modifiedModel.getLineMaxColumn(startsAt - 1),
+        endLineNumber: endsAt,
+        endColumn: modifiedModel.getLineMaxColumn(endsAt),
+      },
+      text: "",
+      forceMoveMarkers: true,
+    }];
+  }
+
+  return [{
+    range: {
+      startLineNumber: startsAt,
+      startColumn: 1,
+      endLineNumber: isAtEnd ? endsAt : endsAt + 1,
+      endColumn: isAtEnd ? modifiedModel.getLineMaxColumn(endsAt) : 1,
+    },
+    text: isAtEnd || originalIsEmpty
+      ? originalText
+      : originalText + modifiedModel.getEOL(),
+    forceMoveMarkers: true,
+  }];
+}
+
+function getLineBlock(
+  model: MonacoEditor.ITextModel,
+  startLineNumber: number,
+  endLineNumber: number,
+) {
+  const lines: string[] = [];
+  for (let line = startLineNumber; line <= endLineNumber; line += 1) {
+    lines.push(model.getLineContent(line));
+  }
+  return lines.join(model.getEOL());
+}
+
+function emptyRange(lineNumber: number, column: number) {
+  return {
+    startLineNumber: lineNumber,
+    startColumn: column,
+    endLineNumber: lineNumber,
+    endColumn: column,
+  };
 }

@@ -8,18 +8,47 @@ vi.mock("@monaco-editor/react", () => ({
   default: ({ value }: { value?: string }) => (
     <pre data-testid="monaco-editor">{value}</pre>
   ),
-  DiffEditor: ({
-    original,
-    modified,
-  }: {
-    original?: string;
-    modified?: string;
-  }) => (
-    <div data-testid="monaco-diff">
-      <pre>{original}</pre>
-      <pre>{modified}</pre>
-    </div>
-  ),
+  loader: {
+    init: async () => {
+      const createModel = (initialValue: string) => {
+        let value = initialValue;
+        return {
+          dispose: vi.fn(),
+          getValue: () => value,
+          setValue: (nextValue: string) => {
+            value = nextValue;
+          },
+          updateOptions: vi.fn(),
+        };
+      };
+      const disposable = { dispose: vi.fn() };
+      const codeEditor = {
+        deltaDecorations: () => [],
+        executeEdits: vi.fn(),
+        getValue: () => "",
+        onDidChangeModelContent: () => disposable,
+        onMouseDown: () => disposable,
+        pushUndoStop: vi.fn(),
+        updateOptions: vi.fn(),
+      };
+      const diffEditor = {
+        dispose: vi.fn(),
+        getLineChanges: () => [],
+        getModifiedEditor: () => codeEditor,
+        getOriginalEditor: () => codeEditor,
+        onDidUpdateDiff: () => disposable,
+        setModel: vi.fn(),
+      };
+
+      return {
+        editor: {
+          createDiffEditor: () => diffEditor,
+          createModel,
+          setTheme: vi.fn(),
+        },
+      };
+    },
+  },
 }));
 
 Object.defineProperty(window.navigator, "clipboard", {

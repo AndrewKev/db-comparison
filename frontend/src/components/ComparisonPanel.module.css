@@ -163,6 +163,31 @@
   background: #111b2c;
 }
 
+.diffEditor {
+  height: 590px;
+}
+
+:global(.comparison-block-revert) {
+  cursor: pointer;
+}
+
+:global(.comparison-block-revert)::before {
+  display: grid;
+  width: 16px;
+  height: 16px;
+  place-content: center;
+  border-radius: 4px;
+  color: #d8e1ef;
+  background: #3b4b62;
+  content: "→";
+  font: 700 12px/1 sans-serif;
+}
+
+:global(.comparison-block-revert):hover::before {
+  color: #10212d;
+  background: #67d2c4;
+}
+
 .empty {
   display: grid;
   min-height: 410px;
