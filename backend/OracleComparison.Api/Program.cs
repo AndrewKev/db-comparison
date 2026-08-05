@@ -14,20 +14,25 @@ var publishMetadata = typeof(Program).Assembly
     .Where(attribute => !string.IsNullOrWhiteSpace(attribute.Value))
     .ToDictionary(attribute => attribute.Key, attribute => attribute.Value!);
 
-if (publishMetadata.TryGetValue("PublishedUrls", out var publishedUrls))
-    builder.WebHost.UseUrls(publishedUrls);
-
-if (publishMetadata.TryGetValue("PublishedAllowedCorsOrigin", out var publishedAllowedCorsOrigin))
-{
-    builder.Configuration[
-        $"{OracleComparisonOptions.SectionName}:{nameof(OracleComparisonOptions.AllowedCorsOrigin)}"] =
-        publishedAllowedCorsOrigin;
-}
-
 var frontendIsEmbedded =
     publishMetadata.TryGetValue("FrontendEmbedded", out var embeddedValue) &&
     bool.TryParse(embeddedValue, out var isEmbedded) &&
     isEmbedded;
+
+if (frontendIsEmbedded)
+{
+    if (publishMetadata.TryGetValue("PublishedUrls", out var publishedUrls))
+        builder.WebHost.UseUrls(publishedUrls);
+
+    if (publishMetadata.TryGetValue(
+            "PublishedAllowedCorsOrigin",
+            out var publishedAllowedCorsOrigin))
+    {
+        builder.Configuration[
+            $"{OracleComparisonOptions.SectionName}:{nameof(OracleComparisonOptions.AllowedCorsOrigin)}"] =
+            publishedAllowedCorsOrigin;
+    }
+}
 
 builder.Services.AddControllers()
     .ConfigureApiBehaviorOptions(api =>

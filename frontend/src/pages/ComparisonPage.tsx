@@ -78,6 +78,7 @@ export function ComparisonPage() {
         schemaName: response.schemaName,
         viewName: response.viewName,
         script: response.script,
+        dependencies: response.dependencies ?? [],
       });
       notify(
         "success",

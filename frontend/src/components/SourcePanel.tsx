@@ -200,6 +200,55 @@ export function SourcePanel({
         onNormalize={onNormalize}
         onCopy={onCopy}
       />
+
+      <section className={styles.dependencies} aria-label={`${label} view dependencies`}>
+        <div className={styles.dependenciesHeader}>
+          <div>
+            <span className={styles.eyebrow}>Referenced objects</span>
+            <h3>View dependencies</h3>
+          </div>
+          <span className={styles.dependencyCount}>
+            {source.script ? source.dependencies.length : "—"}
+          </span>
+        </div>
+
+        {!source.script ? (
+          <p className={styles.dependenciesEmpty}>
+            Load a view script to inspect its referenced tables and views.
+          </p>
+        ) : source.dependencies.length === 0 ? (
+          <p className={styles.dependenciesEmpty}>
+            No referenced objects were found for this view.
+          </p>
+        ) : (
+          <div className={styles.dependencyTableWrapper}>
+            <table className={styles.dependencyTable}>
+              <thead>
+                <tr>
+                  <th scope="col">Owner</th>
+                  <th scope="col">Object</th>
+                  <th scope="col">Type</th>
+                  <th scope="col">Database link</th>
+                </tr>
+              </thead>
+              <tbody>
+                {source.dependencies.map((dependency, index) => (
+                  <tr
+                    key={`${dependency.referencedOwner ?? ""}.${dependency.referencedName}@${dependency.databaseLink ?? ""}-${index}`}
+                  >
+                    <td>{dependency.referencedOwner ?? "—"}</td>
+                    <td>{dependency.referencedName}</td>
+                    <td>
+                      <span className={styles.typeBadge}>{dependency.referencedType}</span>
+                    </td>
+                    <td>{dependency.databaseLink ?? "Local"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
     </article>
   );
 }

@@ -10,6 +10,7 @@ memori halaman dan request API selama sesi.
 - Dua koneksi Oracle independen: **Source A** dan **Source B**
 - Field `Schema Name` dan `View Name` terpisah
 - Test connection dan load view script untuk setiap source
+- Daftar tabel/view dependency dari `ALL_DEPENDENCIES` dan referensi database link dari DDL
 - Monaco SQL Editor read-only dengan line number, copy, dan normalisasi whitespace
 - Monaco Diff Editor untuk menunjukkan baris sama, berubah, ditambah, dan dihapus
 - Transfer per blok perubahan seperti VS Code melalui panah pada gutter tengah
@@ -142,7 +143,15 @@ Response `200 OK`:
   "executionTimeMs": 42,
   "schemaName": "MY_SCHEMA",
   "viewName": "MY_VIEW",
-  "script": "CREATE OR REPLACE FORCE VIEW \"MY_SCHEMA\".\"MY_VIEW\" AS\nSELECT ..."
+  "script": "CREATE OR REPLACE FORCE VIEW \"MY_SCHEMA\".\"MY_VIEW\" AS\nSELECT ...",
+  "dependencies": [
+    {
+      "referencedOwner": "REMOTE_SCHEMA",
+      "referencedName": "REMOTE_TABLE",
+      "referencedType": "REMOTE OBJECT",
+      "databaseLink": "REPORTING_LINK"
+    }
+  ]
 }
 ```
 
@@ -172,6 +181,25 @@ SELECT DBMS_METADATA.GET_DDL(
 ) AS VIEW_SCRIPT
 FROM DUAL
 ```
+
+Dependency lokal diambil dari `ALL_DEPENDENCIES` menggunakan bind parameter untuk
+schema dan nama view:
+
+```sql
+SELECT REFERENCED_OWNER,
+       REFERENCED_NAME,
+       REFERENCED_TYPE
+FROM ALL_DEPENDENCIES
+WHERE OWNER = UPPER(:schemaName)
+  AND NAME = UPPER(:viewName)
+  AND TYPE = 'VIEW'
+ORDER BY REFERENCED_OWNER, REFERENCED_NAME
+```
+
+Karena object yang diakses melalui database link tidak selalu muncul di
+`ALL_DEPENDENCIES`, backend juga memeriksa DDL dan mengambil referensi berbentuk
+`OWNER.OBJECT@DATABASE_LINK` atau `OBJECT@DATABASE_LINK`. Hasil keduanya digabungkan,
+lalu duplikat dihapus berdasarkan owner, nama object, dan database link.
 
 `viewName` dan `schemaName` selalu menggunakan bind parameter. Sebelum binding,
 keduanya harus lolos allowlist identifier:
@@ -264,6 +292,9 @@ Parameter `PublishedUrls` dan `PublishedAllowedCorsOrigin` ditanam sebagai metad
 assembly selama publish. Static files frontend juga ditanam sebagai embedded
 resources. Nilai dan file tersebut benar-benar dapat dibaca langsung dari `.exe`,
 bukan sekadar environment variable sementara atau file terpisah di folder publish.
+Metadata tersebut hanya mengambil alih konfigurasi ketika frontend embedded aktif.
+Saat menjalankan `dotnet run` atau Docker dengan frontend terpisah, backend tetap
+menggunakan `OracleComparison:AllowedCorsOrigin` dari appsettings atau environment.
 
 Hasil utama berada di `publish/win-x64/OracleComparison.Api.exe`. Jalankan:
 

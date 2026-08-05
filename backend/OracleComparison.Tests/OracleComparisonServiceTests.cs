@@ -37,6 +37,74 @@ public sealed class OracleComparisonServiceTests
     }
 
     [Fact]
+    public void BuildGetViewDependenciesQuery_UsesBindParametersAndViewTypeFilter()
+    {
+        var sql = OracleComparisonService.BuildGetViewDependenciesQuery();
+
+        Assert.Contains("FROM ALL_DEPENDENCIES", sql);
+        Assert.Contains("OWNER = UPPER(:schemaName)", sql);
+        Assert.Contains("NAME = UPPER(:viewName)", sql);
+        Assert.Contains("TYPE = 'VIEW'", sql);
+        Assert.DoesNotContain("MY_VIEW", sql);
+    }
+
+    [Fact]
+    public void ExtractDatabaseLinkDependencies_FindsQualifiedAndUnqualifiedObjects()
+    {
+        const string script = """
+            CREATE VIEW SAMPLE_VIEW AS
+            SELECT a.ID
+            FROM REMOTE_OWNER.REMOTE_TABLE@REPORTING_LINK a
+            JOIN "Mixed Owner"."Mixed Table"@"Case Link" b ON b.ID = a.ID
+            JOIN SECOND_TABLE@SECOND_LINK.DOMAIN b ON b.ID = a.ID
+            """;
+
+        var result = OracleComparisonService.ExtractDatabaseLinkDependencies(script);
+
+        Assert.Collection(
+            result,
+            dependency =>
+            {
+                Assert.Null(dependency.ReferencedOwner);
+                Assert.Equal("SECOND_TABLE", dependency.ReferencedName);
+                Assert.Equal("SECOND_LINK.DOMAIN", dependency.DatabaseLink);
+            },
+            dependency =>
+            {
+                Assert.Equal("Mixed Owner", dependency.ReferencedOwner);
+                Assert.Equal("Mixed Table", dependency.ReferencedName);
+                Assert.Equal("Case Link", dependency.DatabaseLink);
+            },
+            dependency =>
+            {
+                Assert.Equal("REMOTE_OWNER", dependency.ReferencedOwner);
+                Assert.Equal("REMOTE_TABLE", dependency.ReferencedName);
+                Assert.Equal("REPORTING_LINK", dependency.DatabaseLink);
+                Assert.Equal("REMOTE OBJECT", dependency.ReferencedType);
+            });
+    }
+
+    [Fact]
+    public void ExtractDatabaseLinkDependencies_IgnoresCommentsAndStringLiteralsAndDeduplicates()
+    {
+        const string script = """
+            CREATE VIEW SAMPLE_VIEW AS
+            SELECT 'FAKE.TABLE@FAKE_LINK' AS VALUE
+            FROM REAL_OWNER.REAL_TABLE@REAL_LINK a
+            JOIN real_owner.real_table@real_link b ON b.ID = a.ID
+            -- COMMENTED.TABLE@COMMENT_LINK
+            /* BLOCKED.TABLE@BLOCK_LINK */
+            """;
+
+        var dependency = Assert.Single(
+            OracleComparisonService.ExtractDatabaseLinkDependencies(script));
+
+        Assert.Equal("REAL_OWNER", dependency.ReferencedOwner);
+        Assert.Equal("REAL_TABLE", dependency.ReferencedName);
+        Assert.Equal("REAL_LINK", dependency.DatabaseLink);
+    }
+
+    [Fact]
     public void NormalizeScript_NormalizesLineEndingsAndOuterWhitespace()
     {
         var result = OracleComparisonService.NormalizeScript(

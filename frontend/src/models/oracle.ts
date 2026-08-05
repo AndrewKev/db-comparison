@@ -9,6 +9,14 @@ export interface OracleSourceState {
   error?: string;
   executionTimeMs?: number;
   script: string;
+  dependencies: ViewDependency[];
+}
+
+export interface ViewDependency {
+  referencedOwner: string | null;
+  referencedName: string;
+  referencedType: string;
+  databaseLink: string | null;
 }
 
 export interface LoadViewScriptResponse {
@@ -17,6 +25,7 @@ export interface LoadViewScriptResponse {
   schemaName: string;
   viewName: string;
   script: string;
+  dependencies: ViewDependency[];
 }
 
 export interface TestConnectionResponse {
@@ -37,4 +46,5 @@ export const createEmptySource = (): OracleSourceState => ({
   loading: false,
   connectionStatus: "idle",
   script: "",
+  dependencies: [],
 });

@@ -7,6 +7,13 @@ public sealed record LoadViewScriptResponse(
     long ExecutionTimeMs,
     string SchemaName,
     string ViewName,
-    string Script);
+    string Script,
+    IReadOnlyList<ViewDependencyResponse> Dependencies);
+
+public sealed record ViewDependencyResponse(
+    string? ReferencedOwner,
+    string ReferencedName,
+    string ReferencedType,
+    string? DatabaseLink);
 
 public sealed record ApiErrorResponse(bool Success, string Message, string ErrorCode);

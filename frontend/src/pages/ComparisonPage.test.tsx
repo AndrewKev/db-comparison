@@ -23,6 +23,20 @@ describe("ComparisonPage", () => {
           schemaName: "MY_SCHEMA",
           viewName: "MY_VIEW",
           script: "CREATE OR REPLACE VIEW MY_VIEW AS SELECT 1 AS ID FROM DUAL",
+          dependencies: [
+            {
+              referencedOwner: "LOCAL_SCHEMA",
+              referencedName: "LOCAL_TABLE",
+              referencedType: "TABLE",
+              databaseLink: null,
+            },
+            {
+              referencedOwner: "REMOTE_SCHEMA",
+              referencedName: "REMOTE_TABLE",
+              referencedType: "REMOTE OBJECT",
+              databaseLink: "REPORTING_LINK",
+            },
+          ],
         }),
         { status: 200, headers: { "Content-Type": "application/json" } },
       ),
@@ -45,6 +59,8 @@ describe("ComparisonPage", () => {
       expect(screen.getByRole("button", { name: "Compare" })).toBeEnabled(),
     );
     expect(await screen.findByTestId("monaco-diff")).toBeInTheDocument();
+    expect(screen.getAllByText("LOCAL_TABLE")).toHaveLength(2);
+    expect(screen.getAllByText("REPORTING_LINK")).toHaveLength(2);
 
     await user.click(screen.getByRole("button", { name: "B → A" }));
     expect(screen.getByText("Source B · Reference")).toBeInTheDocument();
