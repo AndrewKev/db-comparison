@@ -290,7 +290,8 @@ public sealed class OracleComparisonService(
                     deletedRows,
                     $"Deleted {deletedRows} rows from {tableName}.");
             },
-            cancellationToken);
+            cancellationToken,
+            exposeOracleError: true);
     }
 
     public Task<SyncProductionDataResponse> SyncProductionDataAsync(
