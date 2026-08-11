@@ -37,4 +37,39 @@ public sealed class OracleIdentifierValidatorTests
     {
         Assert.Throws<ApiException>(() => OracleIdentifierValidator.ValidateSchemaName(input));
     }
+
+    [Fact]
+    public void ValidateTableName_AcceptsAnOracle11gIdentifier()
+    {
+        Assert.Equal(
+            "BACKUP_LPP_SIM_M_ASAL_KIRIM_BA",
+            OracleIdentifierValidator.ValidateTableName(
+                "backup_lpp_sim_m_asal_kirim_ba"));
+    }
+
+    [Fact]
+    public void ValidateTableName_RejectsIdentifiersOverThirtyCharacters()
+    {
+        Assert.Throws<ApiException>(() =>
+            OracleIdentifierValidator.ValidateTableName(
+                "BACKUP_LPP_SIM_M_ASAL_KIRIM_BARANG"));
+    }
+
+    [Theory]
+    [InlineData("hodb_asli", "HODB_ASLI")]
+    [InlineData("hodb_asli.domain", "HODB_ASLI.DOMAIN")]
+    public void ValidateDatabaseLink_AcceptsSafeNames(string input, string expected)
+    {
+        Assert.Equal(expected, OracleIdentifierValidator.ValidateDatabaseLink(input));
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("HODB_ASLI; DELETE FROM USERS")]
+    [InlineData("HODB_ASLI@OTHER")]
+    public void ValidateDatabaseLink_RejectsUnsafeNames(string input)
+    {
+        Assert.Throws<ApiException>(() =>
+            OracleIdentifierValidator.ValidateDatabaseLink(input));
+    }
 }

@@ -33,6 +33,43 @@ export interface TestConnectionResponse {
   message: string;
 }
 
+export interface CompareTableCountsResponse {
+  success: boolean;
+  tableName: string;
+  databaseLink: string;
+  localCount: number;
+  remoteCount: number;
+}
+
+export interface CreateTableBackupResponse {
+  success: boolean;
+  backupTableName: string;
+  rowsCopied: number;
+  message: string;
+}
+
+export interface CheckTableBackupResponse {
+  success: boolean;
+  backupTableName: string;
+  exists: boolean;
+  rowCount: number;
+}
+
+export interface DeleteLocalTableDataResponse {
+  success: boolean;
+  tableName: string;
+  deletedRows: number;
+  message: string;
+}
+
+export interface SyncProductionDataResponse {
+  success: boolean;
+  tableName: string;
+  databaseLink: string;
+  insertedRows: number;
+  message: string;
+}
+
 export interface ApiErrorResponse {
   success: false;
   message: string;

@@ -130,4 +130,101 @@ public sealed class OracleComparisonServiceTests
 
         Assert.Equal("VIEW_SCRIPT_TOO_LARGE", exception.ErrorCode);
     }
+
+    [Fact]
+    public void BuildCompareTableCountsQuery_UsesValidatedLocalAndRemoteTables()
+    {
+        var sql = OracleComparisonService.BuildCompareTableCountsQuery(
+            "m_custom_table",
+            "custom_link.domain");
+
+        Assert.Contains("FROM M_CUSTOM_TABLE)", sql);
+        Assert.Contains("FROM M_CUSTOM_TABLE@CUSTOM_LINK.DOMAIN)", sql);
+        Assert.Contains("AS COUNT_LOKAL", sql);
+        Assert.Contains("AS COUNT_HODB_ASLI", sql);
+    }
+
+    [Fact]
+    public void BuildCreateTableBackupQuery_UsesValidatedTableNameAndCtas()
+    {
+        var sql = OracleComparisonService.BuildCreateTableBackupQuery(
+            "backup_lpp_sim_test",
+            "m_custom_table");
+
+        Assert.Equal(
+            "CREATE TABLE BACKUP_LPP_SIM_TEST AS SELECT * FROM M_CUSTOM_TABLE",
+            sql);
+    }
+
+    [Fact]
+    public void BuildCreateTableBackupQuery_RejectsSqlInjection()
+    {
+        Assert.Throws<ApiException>(() =>
+            OracleComparisonService.BuildCreateTableBackupQuery(
+                "BACKUP_TABLE; DELETE FROM USERS",
+                "M_CUSTOM_TABLE"));
+
+        Assert.Throws<ApiException>(() =>
+            OracleComparisonService.BuildCompareTableCountsQuery(
+                "M_CUSTOM_TABLE; DELETE FROM USERS",
+                "CUSTOM_LINK"));
+
+        Assert.Throws<ApiException>(() =>
+            OracleComparisonService.BuildCompareTableCountsQuery(
+                "M_CUSTOM_TABLE",
+                "CUSTOM_LINK; DELETE FROM USERS"));
+
+        Assert.Throws<ApiException>(() =>
+            OracleComparisonService.BuildCreateTableBackupQuery(
+                "BACKUP_LPP_SIM_TEST",
+                "M_CUSTOM_TABLE; DELETE FROM USERS"));
+
+        Assert.Throws<ApiException>(() =>
+            OracleComparisonService.BuildSyncDataWithProductionQuery(
+                "M_CUSTOM_TABLE",
+                "CUSTOM_LINK; DELETE FROM USERS"));
+    }
+
+    [Fact]
+    public void BuildCheckAndDeleteQueries_OnlyTargetValidatedTables()
+    {
+        Assert.Equal(
+            "SELECT COUNT(*) FROM BACKUP_LPP_SIM_TEST",
+            OracleComparisonService.BuildCheckTableBackupQuery("backup_lpp_sim_test"));
+        Assert.Equal(
+            "DELETE FROM M_CUSTOM_TABLE",
+            OracleComparisonService.BuildDeleteLocalTableDataQuery("m_custom_table"));
+        Assert.Equal(
+            "SELECT COUNT(*) FROM USER_TABLES WHERE TABLE_NAME = :tableName",
+            OracleComparisonService.BuildTableExistsQuery());
+        Assert.Equal(
+            "INSERT INTO M_CUSTOM_TABLE SELECT * FROM M_CUSTOM_TABLE@CUSTOM_LINK.DOMAIN",
+            OracleComparisonService.BuildSyncDataWithProductionQuery(
+                "m_custom_table",
+                "custom_link.domain"));
+    }
+
+    [Fact]
+    public void EnsureBackupMatchesLocalCount_RejectsDeletingAnUnverifiedBackup()
+    {
+        var exception = Assert.Throws<ApiException>(() =>
+            OracleComparisonService.EnsureBackupMatchesLocalCount(
+                "BACKUP_LPP_SIM_TEST",
+                backupRowCount: 9,
+                localRowCount: 10,
+                sourceTableName: "M_CUSTOM_TABLE"));
+
+        Assert.Equal("BACKUP_ROW_COUNT_MISMATCH", exception.ErrorCode);
+        Assert.Equal(409, exception.StatusCode);
+    }
+
+    [Fact]
+    public void EnsureBackupMatchesLocalCount_AllowsMatchingCounts()
+    {
+        OracleComparisonService.EnsureBackupMatchesLocalCount(
+            "BACKUP_LPP_SIM_TEST",
+            backupRowCount: 10,
+            localRowCount: 10,
+            sourceTableName: "M_CUSTOM_TABLE");
+    }
 }

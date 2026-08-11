@@ -1,7 +1,12 @@
 import type {
   ApiErrorResponse,
+  CheckTableBackupResponse,
+  CompareTableCountsResponse,
+  CreateTableBackupResponse,
+  DeleteLocalTableDataResponse,
   LoadViewScriptResponse,
   TestConnectionResponse,
+  SyncProductionDataResponse,
 } from "../models/oracle";
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? "").replace(/\/$/, "");
@@ -64,5 +69,70 @@ export const oracleClient = {
     signal?: AbortSignal,
   ) {
     return post<LoadViewScriptResponse>("/api/oracle/load-view-script", input, signal);
+  },
+
+  compareTableCounts(
+    connectionString: string,
+    tableName: string,
+    databaseLink: string,
+    signal?: AbortSignal,
+  ) {
+    return post<CompareTableCountsResponse>(
+      "/api/oracle/compare-table-counts",
+      { connectionString, tableName, databaseLink },
+      signal,
+    );
+  },
+
+  createTableBackup(
+    connectionString: string,
+    tableName: string,
+    backupTableName: string,
+    signal?: AbortSignal,
+  ) {
+    return post<CreateTableBackupResponse>(
+      "/api/oracle/create-table-backup",
+      { connectionString, tableName, backupTableName },
+      signal,
+    );
+  },
+
+  checkTableBackup(
+    connectionString: string,
+    tableName: string,
+    backupTableName: string,
+    signal?: AbortSignal,
+  ) {
+    return post<CheckTableBackupResponse>(
+      "/api/oracle/check-table-backup",
+      { connectionString, tableName, backupTableName },
+      signal,
+    );
+  },
+
+  deleteLocalTableData(
+    connectionString: string,
+    tableName: string,
+    backupTableName: string,
+    signal?: AbortSignal,
+  ) {
+    return post<DeleteLocalTableDataResponse>(
+      "/api/oracle/delete-local-table-data",
+      { connectionString, tableName, backupTableName },
+      signal,
+    );
+  },
+
+  syncDataWithProduction(
+    connectionString: string,
+    tableName: string,
+    databaseLink: string,
+    signal?: AbortSignal,
+  ) {
+    return post<SyncProductionDataResponse>(
+      "/api/oracle/sync-data-with-production",
+      { connectionString, tableName, databaseLink },
+      signal,
+    );
   },
 };

@@ -122,20 +122,6 @@ export function ComparisonPage() {
   return (
     <>
       <Toast toast={toast} onDismiss={() => setToast(undefined)} />
-      <header className={styles.topbar}>
-        <a className={styles.brand} href="/" aria-label="Oracle Lens home">
-          <span className={styles.mark}>OL</span>
-          <span>
-            <strong>Oracle Lens</strong>
-            <small>Database comparison workspace</small>
-          </span>
-        </a>
-        <div className={styles.security}>
-          <span aria-hidden="true">◇</span>
-          Session-only credentials
-        </div>
-      </header>
-
       <main>
         <section className={styles.hero}>
           <span className={styles.kicker}>Oracle 11g compatible</span>
@@ -194,11 +180,6 @@ export function ComparisonPage() {
           />
         </div>
       </main>
-
-      <footer className={styles.footer}>
-        <span>Oracle Lens</span>
-        <p>Connection strings exist only in memory for the current page session.</p>
-      </footer>
     </>
   );
 }

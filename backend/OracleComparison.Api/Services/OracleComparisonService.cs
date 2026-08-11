@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Options;
@@ -151,6 +152,255 @@ public sealed class OracleComparisonService(
         return response;
     }
 
+    public Task<CompareTableCountsResponse> CompareTableCountsAsync(
+        CompareTableCountsRequest request,
+        CancellationToken cancellationToken)
+    {
+        var connectionString = RequestValidator.ValidateConnectionString(request.ConnectionString);
+        var tableName = OracleIdentifierValidator.ValidateTableName(request.TableName);
+        var databaseLink = OracleIdentifierValidator.ValidateDatabaseLink(request.DatabaseLink);
+        return ExecuteDataOperationAsync(
+            connectionString,
+            "TABLE_COUNT_COMPARISON_FAILED",
+            "Unable to compare the local and remote table counts.",
+            async (connection, token) =>
+            {
+                using var command = connection.CreateCommand();
+                command.CommandText = BuildCompareTableCountsQuery(tableName, databaseLink);
+                ConfigureDataCommand(command);
+
+                using var reader = await command.ExecuteReaderAsync(token);
+                if (!await reader.ReadAsync(token))
+                {
+                    throw new ApiException(
+                        StatusCodes.Status422UnprocessableEntity,
+                        "TABLE_COUNT_NOT_RETURNED",
+                        "Oracle returned no row count data.");
+                }
+
+                return new CompareTableCountsResponse(
+                    true,
+                    tableName,
+                    databaseLink,
+                    Convert.ToInt64(reader.GetValue(0), CultureInfo.InvariantCulture),
+                    Convert.ToInt64(reader.GetValue(1), CultureInfo.InvariantCulture));
+            },
+            cancellationToken);
+    }
+
+    public Task<CreateTableBackupResponse> CreateTableBackupAsync(
+        BackupTableRequest request,
+        CancellationToken cancellationToken)
+    {
+        var connectionString = RequestValidator.ValidateConnectionString(request.ConnectionString);
+        var tableName = OracleIdentifierValidator.ValidateTableName(request.TableName);
+        var backupTableName = OracleIdentifierValidator.ValidateTableName(request.BackupTableName);
+
+        return ExecuteDataOperationAsync(
+            connectionString,
+            "CREATE_TABLE_BACKUP_FAILED",
+            "Unable to create the backup table. Verify that the table does not already exist and that the account has CREATE TABLE permission.",
+            async (connection, token) =>
+            {
+                using var command = connection.CreateCommand();
+                command.CommandText = BuildCreateTableBackupQuery(backupTableName, tableName);
+                ConfigureDataCommand(command);
+                await command.ExecuteNonQueryAsync(token);
+
+                var rowsCopied = await CountTableRowsAsync(connection, backupTableName, token);
+                return new CreateTableBackupResponse(
+                    true,
+                    backupTableName,
+                    rowsCopied,
+                    $"Backup table {backupTableName} was created with {rowsCopied} rows.");
+            },
+            cancellationToken);
+    }
+
+    public Task<CheckTableBackupResponse> CheckTableBackupAsync(
+        BackupTableRequest request,
+        CancellationToken cancellationToken)
+    {
+        var connectionString = RequestValidator.ValidateConnectionString(request.ConnectionString);
+        _ = OracleIdentifierValidator.ValidateTableName(request.TableName);
+        var backupTableName = OracleIdentifierValidator.ValidateTableName(request.BackupTableName);
+
+        return ExecuteDataOperationAsync(
+            connectionString,
+            "CHECK_TABLE_BACKUP_FAILED",
+            "Unable to check the backup table.",
+            async (connection, token) =>
+            {
+                var exists = await TableExistsAsync(
+                    connection,
+                    backupTableName,
+                    token);
+                var rowCount = exists
+                    ? await CountTableRowsAsync(connection, backupTableName, token)
+                    : 0;
+
+                return new CheckTableBackupResponse(
+                    true,
+                    backupTableName,
+                    exists,
+                    rowCount);
+            },
+            cancellationToken);
+    }
+
+    public Task<DeleteLocalTableDataResponse> DeleteLocalTableDataAsync(
+        DeleteLocalTableDataRequest request,
+        CancellationToken cancellationToken)
+    {
+        var connectionString = RequestValidator.ValidateConnectionString(request.ConnectionString);
+        var tableName = OracleIdentifierValidator.ValidateTableName(request.TableName);
+        var backupTableName = OracleIdentifierValidator.ValidateTableName(request.BackupTableName);
+
+        return ExecuteDataOperationAsync(
+            connectionString,
+            "DELETE_LOCAL_TABLE_DATA_FAILED",
+            "Unable to delete the local table data.",
+            async (connection, token) =>
+            {
+                var localRowCount = await CountTableRowsAsync(
+                    connection,
+                    tableName,
+                    token);
+                var backupRowCount = await CountTableRowsAsync(
+                    connection,
+                    backupTableName,
+                    token);
+                EnsureBackupMatchesLocalCount(
+                    backupTableName,
+                    backupRowCount,
+                    localRowCount,
+                    tableName);
+
+                using var transaction = connection.BeginTransaction();
+                using var command = connection.CreateCommand();
+                command.Transaction = transaction;
+                command.CommandText = BuildDeleteLocalTableDataQuery(tableName);
+                ConfigureDataCommand(command);
+                var deletedRows = await command.ExecuteNonQueryAsync(token);
+                transaction.Commit();
+
+                return new DeleteLocalTableDataResponse(
+                    true,
+                    tableName,
+                    deletedRows,
+                    $"Deleted {deletedRows} rows from {tableName}.");
+            },
+            cancellationToken);
+    }
+
+    public Task<SyncProductionDataResponse> SyncProductionDataAsync(
+        CompareTableCountsRequest request,
+        CancellationToken cancellationToken)
+    {
+        var connectionString = RequestValidator.ValidateConnectionString(request.ConnectionString);
+        var tableName = OracleIdentifierValidator.ValidateTableName(request.TableName);
+        var databaseLink = OracleIdentifierValidator.ValidateDatabaseLink(request.DatabaseLink);
+
+        return ExecuteDataOperationAsync(
+            connectionString,
+            "SYNC_PRODUCTION_DATA_FAILED",
+            "Unable to sync data from production.",
+            async (connection, token) =>
+            {
+                var localRowCount = await CountTableRowsAsync(connection, tableName, token);
+                if (localRowCount != 0)
+                {
+                    throw new ApiException(
+                        StatusCodes.Status409Conflict,
+                        "LOCAL_TABLE_NOT_EMPTY",
+                        $"Sync was cancelled because {tableName} already contains {localRowCount} rows.");
+                }
+
+                using var transaction = connection.BeginTransaction();
+                using var command = connection.CreateCommand();
+                command.Transaction = transaction;
+                command.CommandText = BuildSyncDataWithProductionQuery(
+                    tableName,
+                    databaseLink);
+                ConfigureDataCommand(command);
+                var insertedRows = await command.ExecuteNonQueryAsync(token);
+                transaction.Commit();
+
+                return new SyncProductionDataResponse(
+                    true,
+                    tableName,
+                    databaseLink,
+                    insertedRows,
+                    $"Inserted {insertedRows} rows into {tableName} from {databaseLink}.");
+            },
+            cancellationToken,
+            exposeOracleError: true);
+    }
+
+    public static string BuildCompareTableCountsQuery(
+        string tableName,
+        string databaseLink)
+    {
+        var validatedName = OracleIdentifierValidator.ValidateTableName(tableName);
+        var validatedDatabaseLink =
+            OracleIdentifierValidator.ValidateDatabaseLink(databaseLink);
+        return $"""
+        SELECT
+            (SELECT COUNT(*) FROM {validatedName}) AS COUNT_LOKAL,
+            (SELECT COUNT(*) FROM {validatedName}@{validatedDatabaseLink}) AS COUNT_HODB_ASLI
+        FROM DUAL
+        """;
+    }
+
+    public static string BuildCreateTableBackupQuery(
+        string backupTableName,
+        string sourceTableName)
+    {
+        var validatedBackupName = OracleIdentifierValidator.ValidateTableName(backupTableName);
+        var validatedSourceName = OracleIdentifierValidator.ValidateTableName(sourceTableName);
+        return $"CREATE TABLE {validatedBackupName} AS SELECT * FROM {validatedSourceName}";
+    }
+
+    public static string BuildCheckTableBackupQuery(string backupTableName)
+    {
+        var validatedName = OracleIdentifierValidator.ValidateTableName(backupTableName);
+        return $"SELECT COUNT(*) FROM {validatedName}";
+    }
+
+    public static string BuildTableExistsQuery() =>
+        "SELECT COUNT(*) FROM USER_TABLES WHERE TABLE_NAME = :tableName";
+
+    public static string BuildSyncDataWithProductionQuery(
+        string tableName,
+        string databaseLink)
+    {
+        var validatedName = OracleIdentifierValidator.ValidateTableName(tableName);
+        var validatedDatabaseLink =
+            OracleIdentifierValidator.ValidateDatabaseLink(databaseLink);
+        return $"INSERT INTO {validatedName} SELECT * FROM {validatedName}@{validatedDatabaseLink}";
+    }
+
+    public static string BuildDeleteLocalTableDataQuery(string tableName)
+    {
+        var validatedName = OracleIdentifierValidator.ValidateTableName(tableName);
+        return $"DELETE FROM {validatedName}";
+    }
+
+    public static void EnsureBackupMatchesLocalCount(
+        string backupTableName,
+        long backupRowCount,
+        long localRowCount,
+        string sourceTableName)
+    {
+        if (backupRowCount != localRowCount)
+        {
+            throw new ApiException(
+                StatusCodes.Status409Conflict,
+                "BACKUP_ROW_COUNT_MISMATCH",
+                $"Delete was cancelled because {backupTableName} contains {backupRowCount} rows while {sourceTableName} contains {localRowCount} rows.");
+        }
+    }
+
     public static string BuildGetViewDdlQuery() =>
         "SELECT DBMS_METADATA.GET_DDL('VIEW', :viewName, :schemaName) AS VIEW_SCRIPT FROM DUAL";
 
@@ -290,6 +540,116 @@ public sealed class OracleComparisonService(
         command.Parameters.Add("viewName", OracleDbType.Varchar2, 30).Value = viewName;
         command.Parameters.Add("schemaName", OracleDbType.Varchar2, 30).Value = schemaName;
     }
+
+    private void ConfigureDataCommand(OracleCommand command)
+    {
+        command.CommandTimeout = _options.QueryTimeoutSeconds;
+        command.BindByName = true;
+    }
+
+    private async Task<long> CountTableRowsAsync(
+        OracleConnection connection,
+        string tableName,
+        CancellationToken cancellationToken)
+    {
+        using var command = connection.CreateCommand();
+        command.CommandText = BuildCheckTableBackupQuery(tableName);
+        ConfigureDataCommand(command);
+        var value = await command.ExecuteScalarAsync(cancellationToken);
+        return Convert.ToInt64(value, CultureInfo.InvariantCulture);
+    }
+
+    private async Task<bool> TableExistsAsync(
+        OracleConnection connection,
+        string tableName,
+        CancellationToken cancellationToken)
+    {
+        using var command = connection.CreateCommand();
+        command.CommandText = BuildTableExistsQuery();
+        ConfigureDataCommand(command);
+        command.Parameters.Add("tableName", OracleDbType.Varchar2, 30).Value = tableName;
+        var value = await command.ExecuteScalarAsync(cancellationToken);
+        return Convert.ToInt64(value, CultureInfo.InvariantCulture) > 0;
+    }
+
+    private async Task<T> ExecuteDataOperationAsync<T>(
+        string connectionString,
+        string errorCode,
+        string publicMessage,
+        Func<OracleConnection, CancellationToken, Task<T>> operation,
+        CancellationToken cancellationToken,
+        bool exposeOracleError = false)
+    {
+        using var connection = new OracleConnection(connectionString);
+        try
+        {
+            await connection.OpenAsync(cancellationToken);
+        }
+        catch (OracleException exception)
+        {
+            logger.LogWarning("Oracle data connection failed with provider error {Number}.", exception.Number);
+            throw new ApiException(
+                StatusCodes.Status502BadGateway,
+                "ORACLE_CONNECTION_FAILED",
+                ResolveOracleErrorMessage(
+                    exception,
+                    exposeOracleError,
+                    "Unable to connect to Oracle database. Check the host, service, and credentials."),
+                exception);
+        }
+        catch (ArgumentException exception)
+        {
+            throw new ApiException(
+                StatusCodes.Status400BadRequest,
+                "INVALID_CONNECTION_STRING",
+                "The Oracle connection string format is invalid.",
+                exception);
+        }
+
+        try
+        {
+            return await operation(connection, cancellationToken);
+        }
+        catch (OracleException exception) when (exception.Number == 1013)
+        {
+            logger.LogWarning("Oracle data operation exceeded the configured timeout.");
+            throw new ApiException(
+                StatusCodes.Status504GatewayTimeout,
+                "ORACLE_QUERY_TIMEOUT",
+                ResolveOracleErrorMessage(
+                    exception,
+                    exposeOracleError,
+                    "The Oracle data operation exceeded the configured timeout."),
+                exception);
+        }
+        catch (OracleException exception)
+        {
+            logger.LogWarning(
+                "Oracle data operation failed with provider error {Number} and code {ErrorCode}.",
+                exception.Number,
+                errorCode);
+            throw new ApiException(
+                StatusCodes.Status422UnprocessableEntity,
+                errorCode,
+                ResolveOracleErrorMessage(exception, exposeOracleError, publicMessage),
+                exception);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            throw new ApiException(
+                StatusCodes.Status504GatewayTimeout,
+                "ORACLE_QUERY_TIMEOUT",
+                "The Oracle data operation exceeded the configured timeout.");
+        }
+    }
+
+    private static string ResolveOracleErrorMessage(
+        OracleException exception,
+        bool exposeOracleError,
+        string fallbackMessage) =>
+        exposeOracleError && !string.IsNullOrWhiteSpace(exception.Message)
+            ? exception.Message
+            : fallbackMessage;
 
     private static IReadOnlyList<ViewDependencyResponse> MergeDependencies(
         IEnumerable<ViewDependencyResponse> catalogDependencies,
